@@ -16,7 +16,7 @@ function mail.__index(t,k)
     return mail[k]
 end
 
-function mail.chk_result(self, r)
+function mail.__chk_result(self, r)
     if r:getTaggedResult() ~= 'OK' then
         error(r:getTaggedContents())
         return nil
@@ -24,23 +24,23 @@ function mail.chk_result(self, r)
     return r
 end
 
-function mail.logon(self)
-    local r = self:chk_result(self.imap:capability())
+function mail.__logon(self)
+    local r = self:__chk_result(self.imap:capability())
     self.capability = r:getUntaggedContent('CAPABILITY')[1]
     if not self.capability:find('IMAP4rev1') then
        self.imap:shutdown()
        return nil
     elseif self.account.ssl_opts.protocol == 'tlsv1' and
            self.capability:find('STARTTLS') then
-       self:chk_result(self.imap:starttls())
+       self:__chk_result(self.imap:starttls())
     end
-    return self:chk_result(self.imap:login(self.account.user, self.account.pw))
+    return self:__chk_result(self.imap:login(self.account.user, self.account.pw))
 end
 
 function mail.checkmail(self)
     -- send the imap STATUS command pipelined
     local result_str = "Checking for new mail on "..account.name.."\n"
-    local r = self:chk_result(self.imap:LIST('""', '*'))  -- list of all mailboxes
+    local r = self:__chk_result(self.imap:LIST('""', '*'))  -- list of all mailboxes
     local firsttag
     local lasttag
     self.imap:startPipeline()
@@ -107,7 +107,7 @@ function mail.getMailboxes(self)
     -- selectable and 'false' if it isn't, followed by the hierarchy delimiter
          -- check if we're processing child mailboxes
         if hd then mb_name = mb_name..hd..'%' end
-        local r = self:chk_result(self.imap:LIST('""', mb_name))
+        local r = self:__chk_result(self.imap:LIST('""', mb_name))
         local mblist = r:getUntaggedContent('LIST')
         if mblist then
             for i,v in ipairs(mblist) do
@@ -148,6 +148,11 @@ function mail.getMailboxes(self)
 end
 
 function mail.setWorkingMB(self, mb_name)
+--[[
+    Creates a __workingMB table if it doesn't already exist and then pushes
+    mailbox names onto the table for use to keep track of navigating mailbox
+    hierarchies.
+--]]
     if not self.__workingMB then self.__workingMB = {} end
 
     if mb_name then
@@ -181,6 +186,11 @@ function mail.getWorkingMB(self)
 end
 
 function mail.workingMB2str(self)
+--[[
+    Turns __workingMB into a full IMAP mailbox name basically by concatenating
+    all names in the table along with the appropriate hierarchy delimiters as
+    defined in the mbtree table
+--]]
     local mbstr = ''
     local tree_ptr = self.mbtree
     for _,mb in ipairs(self.__workingMB) do
@@ -203,19 +213,23 @@ function mail.workingMB2str(self)
     return mbstr
 end
 
-function mail.openMailbox(self)
+function mail.retrieveMsgSummaries(self)
+--[[
+    Retrieves a date, from and sender for all messages in the mailbox defined by
+    __workingMB.  Puts them in a table called 'mail_summary'.
+--]]
 --    self.imap.threaded = true
     local mb = self:workingMB2str()
     if not mb then return end
     self.mail_summary= {}
-    local r = self:chk_result(self.imap:SELECT(mb))
+    local r = self:__chk_result(self.imap:SELECT(mb))
     if not r then return end
 
     local mailcount = r:getUntaggedContent('EXISTS')[1]
 
     -- now retrieve the some minimal info for all the messages here
     local FETCH_SUMMARY = 'BODY\[HEADER\.FIELDS (DATE FROM SUBJECT)\]'
-    r = self:chk_result(self.imap:FETCH('1:'..mailcount, FETCH_SUMMARY))
+    r = self:__chk_result(self.imap:FETCH('1:'..mailcount, FETCH_SUMMARY))
     if r then
         for _, t in ipairs(r:getUntaggedContent('FETCH')) do
             local subject = util.escape(t[1]:match(".*Subject:%s*(.-)\r"))
@@ -243,7 +257,7 @@ function mail.new(self, account_info)
                                o.account.ssl_opts)
 
     -- take care of the logging into the account
-    if not o:logon() then
+    if not o:__logon() then
         return nil
     end
 
@@ -357,7 +371,7 @@ add_binds("mailbox", join( {
                                   local row = w.menu:get()
                                   local mb = mbStrip(row[1])
                                   mailo:setWorkingMB(mb)
-                                  if mailo:openMailbox(mb) then
+                                  if mailo:retrieveMsgSummaries(mb) then
                                       w:set_mode("mailmessages")
                                   else
                                       mailo:setWorkingMB()
