@@ -269,8 +269,13 @@ function mail.retrieveMsg(self, uid)
    -- find text/html
 --   self.currentmsg = msg:match("Content%-Type%: text/html.-(<.*>).*%-%-_Part.*")
 --    self.currentmsg = msg
-    self.currentmsg = msg:match("Content%-Type%: text/html.-(<.*>)")
-    if not self.currentmsg then error("No current message") end
+    self.currentmsg['html'] = msg:match("Content%-Type%: text/html.-(<.*>)")
+    if self.currentmsg['html'] then return end
+    if msg then
+        self.currentmsg['plain'] = msg
+        return
+    end
+    error("Can't display message... yet.")
 end
 
 function mail.destroy(self)
@@ -287,6 +292,7 @@ function mail.new(self, account_info)
     o.imap = imaplib.IMAP4:new(o.account.server, 
                                o.account.port,
                                o.account.ssl_opts)
+    o.currentmsg = {}
 
     -- take care of the logging into the account
     if not o:__logon() then
@@ -388,7 +394,12 @@ new_mode("mailmessages",
 
 chrome.add("mail/", 
            function(view, uri)
-             view:load_string(mailo.currentmsg, tostring(uri))
+             if mailo.currentmsg['html'] then
+                 view:load_string(mailo.currentmsg['html'], tostring(uri))
+             elseif mailo.currentmsg['plain'] then
+                 view:load_string('<pre>'..mailo.currentmsg['plain']..'<pre>',
+                                  tostring(uri))
+             end
            end
           )
 
