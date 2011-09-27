@@ -1,5 +1,6 @@
 
 local imaplib = require("imap4")
+local chrome = require("chrome")
 local util = require("lousy.util")
 local join = util.table.join
 
@@ -14,6 +15,8 @@ local function hbox()     return widget{type="hbox"}     end
 local function label()    return widget{type="label"}    end
 local function notebook() return widget{type="notebook"} end
 local function vbox()     return widget{type="vbox"}     end
+
+mail_page = "luakit://mail/"
 
 function mail.__index(t,k)
     return mail[k]
@@ -231,17 +234,43 @@ function mail.retrieveMsgSummaries(self)
     local mailcount = r:getUntaggedContent('EXISTS')[1]
 
     -- now retrieve the some minimal info for all the messages here
-    local FETCH_SUMMARY = 'BODY\[HEADER\.FIELDS (DATE FROM SUBJECT)\]'
+    local FETCH_SUMMARY = 'UID BODY\[HEADER\.FIELDS (DATE FROM SUBJECT)\]'
     r = self:__chk_result(self.imap:FETCH('1:'..mailcount, FETCH_SUMMARY))
     if r then
         for _, t in ipairs(r:getUntaggedContent('FETCH')) do
+            local uid = t[1]:match("%(UID (%d+).*")
             local subject = util.escape(t[1]:match(".*Subject:%s*(.-)\r"))
             local from = util.escape(t[1]:match(".*From:%s*(.-)\r"))
             local date = t[1]:match(".*Date:%s*(.-)\r")
-            table.insert(self.mail_summary, {date, from, subject})
+            table.insert(self.mail_summary, {date, from, subject, uid})
         end
     end
     return 1
+end
+
+function mail.retrieveMsg(self, uid)
+--[[
+    Current state, IMAP wise, we've selected a mailbox and already fetched some
+    message summary info.  As for luakit, we're in "mailmessages" mode- not sure
+    that's really relevant though.
+
+    Basically, we've got to fetch the body of a message and return it somehow so
+    the mode can display the message.
+--]]
+    FETCH_SUMMARY = "RFC822.TEXT"
+    local msg = ''
+    r = self:__chk_result(self.imap:UID('FETCH', uid, FETCH_SUMMARY))
+    if r then
+        msg = r:getUntaggedContent('FETCH')[1][1]
+    else
+        error("No message")
+    end
+
+   -- find text/html
+--   self.currentmsg = msg:match("Content%-Type%: text/html.-(<.*>).*%-%-_Part.*")
+--    self.currentmsg = msg
+    self.currentmsg = msg:match("Content%-Type%: text/html.-(<.*>)")
+    if not self.currentmsg then error("No current message") end
 end
 
 function mail.destroy(self)
@@ -349,13 +378,19 @@ new_mode("mailmessages",
           enter = function(w)
                     local rows = {{ "Date", "Sender", "Subject", title = true }, }
                     for _, t in ipairs(mailo.mail_summary) do
-                      table.insert(rows, 2, t)
+                      table.insert(rows, 2, { t[1], t[2], t[3], uid=t[4] })
                     end
                     w.menu:build(rows)
                     w:notify("Use j/k to move, Enter to select", false)
                   end
          }
         )
+
+chrome.add("mail/", 
+           function(view, uri)
+             view:load_string(mailo.currentmsg, tostring(uri))
+           end
+          )
 
 local key = lousy.bind.key
 add_binds("mail", join( {
@@ -422,6 +457,14 @@ add_binds("mailmessages", join( { key({},
                                       function(w)
                                           mailo:setWorkingMB()
                                           w:set_mode("mailbox")
+                                      end
+                                     ),
+                                  key({},
+                                      "Return",
+                                      function(w)
+                                        local row = w.menu:get()
+                                        mailo:retrieveMsg(row.uid)
+                                        w:navigate(mail_page)
                                       end
                                      ),
                                  }, 
