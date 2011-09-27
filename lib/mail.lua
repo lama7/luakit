@@ -5,6 +5,9 @@ local join = util.table.join
 
 local mail = {}
 
+local objects = {}
+local mailo
+
 local function entry()    return widget{type="entry"}    end
 local function eventbox() return widget{type="eventbox"} end
 local function hbox()     return widget{type="hbox"}     end
@@ -267,7 +270,7 @@ end
 --
 --*************************************************************************** 
 --
-function buildMailboxMenu()
+local function buildMailboxMenu()
     local rows = {{"Mailboxes", title = true}, }
     for mb, v in pairs(mailo:getWorkingMB()) do
       local row
@@ -297,7 +300,7 @@ function buildMailboxMenu()
     return rows
 end
 
-function mbStrip(mb)
+local function mbStrip(mb)
     if mb:sub(-1) == '/' then 
         mb = mb:sub(3,-2)
     else
@@ -309,7 +312,10 @@ end
 
 new_mode("mail", 
          {
-          leave = function(w) w.menu:hide() end,
+          leave = function(w)
+                    mailo:setWorkingMB()
+                    w.menu:hide() 
+                  end,
           enter = function(w)
                     local rows = {{"Account", title = true},}
                     for name, account in pairs(accounts) do
@@ -324,6 +330,7 @@ new_mode("mail",
 new_mode("mailbox", 
          {
           leave = function(w) 
+                    mailo:setWorkingMB()
                     w.menu:hide() 
                   end,
           enter = function(w)
@@ -336,6 +343,7 @@ new_mode("mailbox",
 new_mode("mailmessages",
          {
           leave = function(w) 
+                    mailo:setWorkingMB()
                     w.menu:hide()
                   end,
           enter = function(w)
@@ -355,7 +363,12 @@ add_binds("mail", join( {
                              "Return", 
                              function(w)
                                local row = w.menu:get()
-                               mailo = mail:new(accounts[row[1]:sub(3)])
+                               local account = row[1]:sub(3)
+                               mailo = objects[account]
+                               if not mailo then
+                                   mailo = mail:new(accounts[account])
+                                   objects[account] = mailo
+                               end
                                w:set_mode("mailbox")
                              end
                             ),
