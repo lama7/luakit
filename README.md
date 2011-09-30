@@ -24,7 +24,7 @@ luakit behaves similarly out of the box.
 ## Additional Requirements if you use the mail module
 
  * luaimap (https://gitorious.org/luaimap), which depends on lua-md5
- * smtp library (TBD)
+ * msmtp (to send mails)
 
 ## Compiling
 
@@ -116,7 +116,8 @@ There are several files of interest:
  * globals.lua -- change global options like scroll/zoom step, default
                   window size, useragent, search engines, etc.
  * mail.lua    -- implements the mail-client interface, exposed through
-                  the `:mail` command. (currently in the lib folder)
+                  the `:mail` and `:sendmail` commands.
+                  (currently in the lib folder)
 
 Just copy the files you wish to change (and the rc.lua) into
 `$XDG_CONFIG_HOME/luakit` (defaults to `~/.config/luakit/`) and luakit will
