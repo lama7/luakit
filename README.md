@@ -2,6 +2,8 @@
 
 luakit is a fast, light and simple to use micro-browser framework exensible
 by Lua using the WebKit web content engine and the GTK+ toolkit.
+This version includes a built-in mail client too
+(which currently is very limited though)
 
 ## Dont Panic!
 
@@ -18,6 +20,11 @@ luakit behaves similarly out of the box.
  * libunique
  * sqlite3
  * help2man
+
+## Additional Requirements if you use the mail module
+
+ * luaimap (https://gitorious.org/luaimap), which depends on lua-md5
+ * msmtp (to send mails)
 
 ## Compiling
 
@@ -108,6 +115,9 @@ There are several files of interest:
                   that occur when switching modes.
  * globals.lua -- change global options like scroll/zoom step, default
                   window size, useragent, search engines, etc.
+ * mail.lua    -- implements the mail-client interface, exposed through
+                  the `:mail` and `:sendmail` commands.
+                  (currently in the lib folder)
 
 Just copy the files you wish to change (and the rc.lua) into
 `$XDG_CONFIG_HOME/luakit` (defaults to `~/.config/luakit/`) and luakit will

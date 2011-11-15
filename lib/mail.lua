@@ -15,6 +15,10 @@ local function hbox()     return widget{type="hbox"}     end
 local function label()    return widget{type="label"}    end
 local function notebook() return widget{type="notebook"} end
 local function vbox()     return widget{type="vbox"}     end
+local term       = globals.term   or "xterm"
+local editor     = globals.editor or (os.getenv("EDITOR") or "vim")
+local editor_cmd = string.format("%s -e %s", term, editor)
+
 
 mail_page = "luakit://mail/"
 
@@ -302,6 +306,27 @@ function mail.new(self, account_info)
     return o
 end
 
+function mail.edit(file)
+    return luakit.spawn_sync(string.format("%s %q", editor_cmd, file))
+end
+
+function mail.select_recipients()
+	ret,stdout,stderr = luakit.spawn_sync("sh -c \"echo 'user@example.com' | dmenu -p 'To:'\"")
+	if string.len(stderr) > 0 then
+		warn(stderr)
+	end
+	if ret ~= 0 then
+		return nil
+	end
+	rcpt = trim5(stdout)
+	warn ("debug. user choose rcpt: " .. rcpt)
+	return rcpt
+end
+
+function trim5(s) -- see http://lua-users.org/wiki/StringTrim
+	  return s:match'^%s*(.*%S)' or ''
+end
+
 --
 --*************************************************************************** 
 --
@@ -350,6 +375,22 @@ new_mode("mail",
           leave = function(w)
                     mailo:setWorkingMB()
                     w.menu:hide() 
+                  end,
+          enter = function(w)
+                    local rows = {{"Account", title = true},}
+                    for name, account in pairs(accounts) do
+                      table.insert(rows, 2, { "  "..name })
+                    end
+                    w.menu:build(rows)
+                    w:notify("Use j/k to move, Enter to select", false)
+                  end
+         }
+        )
+
+new_mode("sendmail",
+         {
+          leave = function(w)
+                    w.menu:hide()
                   end,
           enter = function(w)
                     local rows = {{"Account", title = true},}
@@ -423,6 +464,49 @@ add_binds("mail", join( {
                       )
          )
 
+add_binds("sendmail", join( {
+                         key({},
+                             "Return",
+                             function(w)
+                               local row = w.menu:get()
+                               local account = row[1]:sub(3)
+                               mailo = objects[account]
+                               if not mailo then
+                                   mailo = mail:new(accounts[account])
+                                   objects[account] = mailo
+                               end
+			       rcpt = mail.select_recipients()
+			       -- if user didn't enter any rcpt, or the program exited >0, abort
+			       if not rcpt or string.len(rcpt) < 1 then
+				       w:set_mode("command")
+				       -- TODO: set status message: aborted
+				end
+				-- prepopulate mail with what we can figure out.
+				fname = luakit.cache_dir .. "/compose_mail.TODO.randomstringhere"
+				local f = assert(io.open(fname, "w"))
+				f:write ("To: " .. rcpt .. "\n")
+				f:write ("From: " .. mailo.account.sender.from .. "\n")
+				f:write ("Subject: \n\n")
+				f:close()
+				-- open editor to edit/create a mail
+				if mail.edit(fname) ~= 0 then
+					error ("editor exited " .. ret .. ". Not sending any mail")
+				else
+					-- TODO: menu: are you sure you want to send this? yes/no/edit message
+					info ("sending mail...")
+					local fh = io.popen("cat " .. fname .. "| " .. mailo.account.sender.cmd .. " " .. rcpt)
+					info ("sender output:")
+					info(fh:read( "*a" ))
+					fh:close()
+					-- TODO copy to sent imap folder, if that folder exists. and if anything fails -> move to some retry-queue
+				end
+                             end
+                            ),
+                        },
+                        menu_binds
+                      )
+         )
+
 add_binds("mailbox", join( {
                             key({}, 
                                 "Return", 
@@ -491,7 +575,15 @@ window.methods.mail = function(w)
                             w:set_mode("mail")
                         end
                       end
+window.methods.sendmail = function(w)
+                        if not accounts then
+                            w:notify("No mail accounts setup.")
+                        else
+                            w:set_mode("sendmail")
+                        end
+                      end
 
 -- add the mail command
 local cmd = lousy.bind.cmd
 add_cmds({ cmd("mail", window.methods.mail), })
+add_cmds({ cmd("sendmail", window.methods.sendmail), })

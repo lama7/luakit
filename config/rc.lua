@@ -52,6 +52,20 @@ require "binds"
 ----------------------------------
 -- Optional user script loading --
 ----------------------------------
+accounts = {}
+senders = {}
+senders['gmail'] = { cmd = 'msmtp -C /path/to/msmtp.cfg -a gmail',
+                     from = 'from-address'
+                 }
+
+accounts['gmail'] =  {name = 'gmail',
+                      server = 'imap.gmail.com',
+                      port = 993,
+                      user = 'user',
+                      pw = 'pass',
+                      ssl_opts = { protocol = 'sslv3' },
+                      sender = senders['gmail'] }
+
 
 -- Add sqlite3 cookiejar
 require "cookies"
